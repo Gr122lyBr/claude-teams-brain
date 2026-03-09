@@ -1,0 +1,30 @@
+# Claude Teams Brain data
+.claude-brain/
+.claude-teams-brain/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Dependencies
+node_modules/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

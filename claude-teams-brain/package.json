@@ -1,0 +1,30 @@
+{
+  "name": "claude-teams-brain",
+  "version": "1.0.0",
+  "description": "Persistent cross-session memory for Claude Code Agent Teams",
+  "type": "module",
+  "main": "start.mjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-code-plugins",
+    "agent-teams",
+    "mcp",
+    "memory",
+    "sqlite",
+    "fts5"
+  ],
+  "author": "Gr122lyBr",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gr122lyBr/claude-teams-brain"
+  },
+  "homepage": "https://github.com/Gr122lyBr/claude-teams-brain#readme",
+  "bugs": {
+    "url": "https://github.com/Gr122lyBr/claude-teams-brain/issues"
+  }
+}

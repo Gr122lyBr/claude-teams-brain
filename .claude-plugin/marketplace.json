@@ -1,0 +1,14 @@
+{
+  "name": "claude-teams-brain",
+  "owner": {
+    "name": "claude-teams-brain contributors",
+    "url": "https://github.com/Gr122lyBr/claude-teams-brain"
+  },
+  "plugins": [
+    {
+      "name": "claude-teams-brain",
+      "source": "./claude-teams-brain",
+      "description": "Persistent cross-session memory for Claude Code Agent Teams. Auto-injects role-specific context into each new teammate so your team never starts blind."
+    }
+  ]
+}
