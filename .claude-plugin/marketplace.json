@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "claude-teams-brain",
-      "source": "./claude-teams-brain",
+      "source": "../claude-teams-brain",
       "description": "Persistent cross-session memory for Claude Code Agent Teams. Auto-injects role-specific context into each new teammate so your team never starts blind."
     }
   ]
