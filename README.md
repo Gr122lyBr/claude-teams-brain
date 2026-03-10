@@ -129,6 +129,19 @@ The `SubagentStart` hook is the core mechanism. When a teammate named `backend` 
 
 All data lives in `~/.claude-teams-brain/projects/<project-hash>/brain.db` — a local SQLite database. Nothing is sent anywhere. No external dependencies beyond Python 3.8+ stdlib.
 
+### Session warm-up
+
+At every `SessionStart`, the brain automatically pre-indexes the following so teammates can search it immediately via `batch_execute`:
+
+| Source | What gets indexed |
+|--------|------------------|
+| `CLAUDE.md` | Project instructions and conventions (if > 200 bytes) |
+| `git log` | Last 20 commits |
+| Directory tree | Project file structure (3 levels deep, noise excluded) |
+| Config files | `package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `go.mod` |
+
+This means the first `batch_execute` call of every teammate already has project context available — no cold-start discovery needed.
+
 ---
 
 ## Usage
