@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MARKETPLACE_DIR="$(cd "${PLUGIN_ROOT}/../../.." && pwd)/marketplaces/claude-teams-brain"
+MARKETPLACE_DIR="$(cd "${PLUGIN_ROOT}/../../../.." && pwd)/marketplaces/claude-teams-brain"
 
 echo "==> Plugin root:     $PLUGIN_ROOT"
 echo "==> Marketplace dir: $MARKETPLACE_DIR"
