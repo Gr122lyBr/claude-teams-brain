@@ -4,7 +4,6 @@
 
 # claude-teams-brain
 
-[![CI](https://github.com/Gr122lyBr/claude-teams-brain/actions/workflows/ci.yml/badge.svg)](https://github.com/Gr122lyBr/claude-teams-brain/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green.svg)](https://nodejs.org)
