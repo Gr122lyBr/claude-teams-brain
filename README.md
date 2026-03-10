@@ -118,14 +118,14 @@ claude-teams-brain hooks into six lifecycle events:
 
 | Hook | What happens |
 |------|-------------|
-| `SessionStart` | Brain initializes, reports how much memory exists for this project |
-| `SubagentStart` | ⭐ Role-specific memory injected directly into each new teammate |
+| `SessionStart` | Brain initializes, indexes CLAUDE.md + git log + directory tree + config files into the session KB |
+| `SubagentStart` | ⭐ Role-specific memory injected — ranked by relevance to the current task, deduplicated |
 | `TaskCompleted` | Task subject and agent identity indexed immediately on completion |
 | `SubagentStop` | Rich indexing: files touched, decisions made, output summary extracted from transcript |
 | `TeammateIdle` | Passive checkpoint |
 | `SessionEnd` | Full session compressed into a summary entry |
 
-The `SubagentStart` hook is the core mechanism. When a teammate named `backend` spawns, the brain queries everything the backend agent has done across all past sessions — tasks completed, files owned, decisions made — and injects it as context before the agent processes its first message. The teammate starts informed, not blank.
+The `SubagentStart` hook is the core mechanism. When a teammate named `backend` spawns, the brain queries everything the backend agent has done across all past sessions — tasks completed, files owned, decisions made — ranks them by relevance to the current task description, deduplicates, and injects the result before the agent processes its first message. The teammate starts informed, not blank.
 
 All data lives in `~/.claude-teams-brain/projects/<project-hash>/brain.db` — a local SQLite database. Nothing is sent anywhere. No external dependencies beyond Python 3.8+ stdlib.
 
@@ -214,7 +214,7 @@ claude-teams-brain includes an MCP server that exposes five tools to all Task su
 
 ### batch_execute
 
-Run multiple shell commands, auto-index all output, and search with queries in a single call.
+Run multiple shell commands, auto-index all output, and search with queries in a single call. Identical commands within the same session are served from a **60-second cache** — no redundant process spawns, no duplicate context.
 
 ```json
 {
@@ -327,6 +327,8 @@ Each project has its own isolated brain. Memory never crosses project boundaries
 - **Use `/brain-remember`** to store project conventions before your first team session — teammates will receive them immediately
 - **Run `/brain-query backend`** to preview exactly what context the backend agent will receive before spawning
 - **Run `/brain-export`** after a few sessions to generate a `CONVENTIONS.md` you can commit to the repo
+- **Memory is relevance-ranked** — if you describe the task clearly when spawning teammates, the brain injects the most relevant past work first
+- **CLAUDE.md is auto-indexed** at every session start — teammates can search it via `batch_execute` queries without re-reading it manually
 
 ---
 
