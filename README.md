@@ -225,11 +225,29 @@ The teammate starts with full context from day one.
 
 | Command | Description |
 |---------|-------------|
-| `/claude-teams-brain:brain-status` | Memory stats for this project |
-| `/claude-teams-brain:brain-query <role>` | Preview the context a new teammate would receive |
-| `/claude-teams-brain:brain-runs` | List past Agent Team sessions |
-| `/claude-teams-brain:brain-clear` | Reset all memory for this project |
-| `/claude-teams-brain:brain-update` | Pull the latest version from GitHub |
+| `/brain-status` | Memory stats for this project |
+| `/brain-query <role>` | Preview the context a new teammate would receive |
+| `/brain-runs` | List past Agent Team sessions |
+| `/brain-clear` | Reset all memory for this project |
+| `/brain-update` | Pull the latest version from GitHub |
+
+> **Note:** If `/brain-update` does not appear in your command list, use `/claude-teams-brain:brain-update` instead.
+
+### Updating the plugin
+
+To pull the latest version:
+
+```
+/brain-update
+```
+
+If you installed an older version and `/brain-update` is not available yet, re-add the marketplace to force a fresh pull:
+
+```
+/plugin marketplace remove claude-teams-brain
+/plugin marketplace add https://github.com/Gr122lyBr/claude-teams-brain
+/plugin install claude-teams-brain@claude-teams-brain
+```
 
 ---
 
