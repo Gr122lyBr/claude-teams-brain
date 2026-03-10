@@ -58,9 +58,26 @@ If `settings.json` already has content, merge the `env` block:
 
 Restart Claude Code after saving.
 
-### 3. Configure CLAUDE.md (recommended)
+---
 
-Add to your project's `CLAUDE.md` to make Claude automatically use Agent Teams:
+## Quick Start
+
+> **Important:** claude-teams-brain only works when Claude spawns Agent Team teammates. If Claude works solo, no memory is built. The two options below ensure teammates are always used.
+
+### Option A — Trigger a team manually
+
+Paste this into Claude Code on any project:
+
+```
+Create an agent team to work on this project.
+Spawn specialized teammates based on what the task needs —
+for example: backend, frontend, tests, security, or architect.
+Use role-specific names so claude-teams-brain can inject memory into each teammate.
+```
+
+### Option B — Make it automatic (recommended)
+
+Add this to your project's `CLAUDE.md` file once, and Claude will always use Agent Teams without you having to ask:
 
 ```markdown
 ## Agent Teams
@@ -73,10 +90,13 @@ in a single session. Good team structures:
 - Reviews: `security`, `performance`, `coverage`
 - Architecture: `architect`, `devil-advocate`, `implementer`
 - Debugging: name teammates after the hypothesis they're testing
+- Research & writing: `researcher`, `writer`, `editor`
 
 The claude-teams-brain plugin is active — each teammate will automatically receive
 memory from past sessions relevant to their role.
 ```
+
+> **Tip:** Role names are fully dynamic. Any name you use becomes a role. The brain routes memory by role name across sessions — so as long as you reuse the same names, memory builds up automatically.
 
 ---
 
@@ -108,6 +128,81 @@ claude-teams-brain hooks into six lifecycle events:
 The `SubagentStart` hook is the core mechanism. When a teammate named `backend` spawns, the brain queries everything the backend agent has done across all past sessions — tasks completed, files owned, decisions made — and injects it as context before the agent processes its first message. The teammate starts informed, not blank.
 
 All data lives in `~/.claude-teams-brain/projects/<project-hash>/brain.db` — a local SQLite database. Nothing is sent anywhere. No external dependencies beyond Python 3.8+ stdlib.
+
+---
+
+## Usage
+
+Once installed, the brain works silently in the background. Just use Agent Teams normally.
+
+**First session (cold start):**
+```
+You: Create an agent team to build the payments module.
+     backend: API endpoints and business logic
+     database: schema and migrations
+     tests: integration test coverage
+
+[Agent Teams session runs — claude-teams-brain indexes everything]
+```
+
+**Second session (warm start):**
+```
+You: Create an agent team to add webhook support to payments.
+     backend: extend the existing payment API
+
+[backend agent spawns and immediately receives:]
+  "## 🧠 claude-teams-brain: Memory for role [backend]
+
+   ### Project Rules & Conventions
+   - Always use UUID v7 for all new database tables
+   - All API endpoints must include rate limiting
+
+   ### Your Past Work
+   - Built payment API endpoints in /src/payments/api.ts
+   - Implemented idempotency key validation middleware
+
+   ### Key Team Decisions
+   - [database] Using UUID v7 for all payment record IDs
+   - [backend] Chose RS256 over HS256 for JWT — better key rotation
+   - [backend] All payment endpoints require idempotency keys
+
+   ### Files You Own
+   - /src/payments/api.ts
+   - /src/payments/middleware/idempotency.ts"
+```
+
+The teammate starts with full context from day one.
+
+---
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/brain-remember <text>` | Store a rule or convention injected into all future teammates |
+| `/brain-forget <text>` | Remove a manually stored memory |
+| `/brain-export` | Export all brain knowledge as `CONVENTIONS.md` |
+| `/brain-status` | Memory stats for this project |
+| `/brain-query <role>` | Preview the context a new teammate would receive |
+| `/brain-runs` | List past Agent Team sessions |
+| `/brain-clear` | Reset all memory for this project |
+| `/brain-update` | Pull the latest version from GitHub |
+
+> **Note:** If a command does not appear in your list, prefix it with the plugin name: `/claude-teams-brain:brain-update`.
+
+### Updating the plugin
+
+```
+/brain-update
+```
+
+If you installed an older version and `/brain-update` is not yet available, re-add the marketplace:
+
+```
+/plugin marketplace remove claude-teams-brain
+/plugin marketplace add https://github.com/Gr122lyBr/claude-teams-brain
+/plugin install claude-teams-brain@claude-teams-brain
+```
 
 ---
 
@@ -181,79 +276,6 @@ Returns bytes indexed vs bytes returned, call counts, and context savings ratio.
 
 ---
 
-## Usage
-
-Once installed, the brain works silently in the background. Just use Agent Teams normally.
-
-**First session (cold start):**
-```
-You: Create an agent team to build the payments module.
-     backend: API endpoints and business logic
-     database: schema and migrations
-     tests: integration test coverage
-
-[Agent Teams session runs — claude-teams-brain indexes everything]
-```
-
-**Second session (warm start):**
-```
-You: Create an agent team to add webhook support to payments.
-     backend: extend the existing payment API
-
-[backend agent spawns and immediately receives:]
-  "## 🧠 claude-teams-brain: Memory for role [backend]
-   
-   ### Your Past Work
-   - Built payment API endpoints in /src/payments/api.ts
-   - Implemented idempotency key validation middleware
-   
-   ### Key Team Decisions
-   - [database] Using UUID v7 for all payment record IDs
-   - [backend] Chose RS256 over HS256 for JWT — better key rotation
-   - [backend] All payment endpoints require idempotency keys
-   
-   ### Files You Own
-   - /src/payments/api.ts
-   - /src/payments/middleware/idempotency.ts"
-```
-
-The teammate starts with full context from day one.
-
----
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/brain-remember <text>` | Store a rule or convention injected into all future teammates |
-| `/brain-forget <text>` | Remove a manually stored memory |
-| `/brain-export` | Export all brain knowledge as `CONVENTIONS.md` |
-| `/brain-status` | Memory stats for this project |
-| `/brain-query <role>` | Preview the context a new teammate would receive |
-| `/brain-runs` | List past Agent Team sessions |
-| `/brain-clear` | Reset all memory for this project |
-| `/brain-update` | Pull the latest version from GitHub |
-
-> **Note:** If `/brain-update` does not appear in your command list, use `/claude-teams-brain:brain-update` instead.
-
-### Updating the plugin
-
-To pull the latest version:
-
-```
-/brain-update
-```
-
-If you installed an older version and `/brain-update` is not available yet, re-add the marketplace to force a fresh pull:
-
-```
-/plugin marketplace remove claude-teams-brain
-/plugin marketplace add https://github.com/Gr122lyBr/claude-teams-brain
-/plugin install claude-teams-brain@claude-teams-brain
-```
-
----
-
 ## Project structure
 
 ```
@@ -273,11 +295,13 @@ claude-teams-brain/                    ← repo root (marketplace)
       on-task-completed.sh
       on-teammate-idle.sh
       on-session-end.sh
-      update.sh                        ← pulled by /brain-update skill
+      update.sh                        ← pulled by /brain-update
     commands/                          ← /brain-* slash commands
     skills/
       claude-teams-brain/              ← auto-activates for agent team workflows
-      brain-update/                    ← /brain-update: pull latest from GitHub
+      brain-update/                    ← /brain-update
+      brain-remember/                  ← /brain-remember
+      brain-export/                    ← /brain-export
     settings.json                      ← enables CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
 ```
 
@@ -300,8 +324,9 @@ Each project has its own isolated brain. Memory never crosses project boundaries
 
 - **Use descriptive agent names** that match their role (`backend`, `database`, `security`) — the brain routes memory by role name
 - **Memory compounds** — the first session is cold, but quality improves significantly from the second session onwards
-- **Check `/claude-teams-brain:brain-status`** before starting a large session to confirm memory is available
-- **Run `/claude-teams-brain:brain-query backend`** to preview exactly what context the backend agent will receive before spawning
+- **Use `/brain-remember`** to store project conventions before your first team session — teammates will receive them immediately
+- **Run `/brain-query backend`** to preview exactly what context the backend agent will receive before spawning
+- **Run `/brain-export`** after a few sessions to generate a `CONVENTIONS.md` you can commit to the repo
 
 ---
 
