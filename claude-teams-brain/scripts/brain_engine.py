@@ -13,6 +13,9 @@ Usage:
   brain_engine.py summarize-run <run_id> [<project_dir>]
   brain_engine.py list-runs [<project_dir>]
   brain_engine.py clear [<project_dir>]
+  brain_engine.py remember <text> [<project_dir>]
+  brain_engine.py forget <text> [<project_dir>]
+  brain_engine.py export-conventions [<project_dir>]
   brain_engine.py kb-index <project_dir> <source> <content_file>
   brain_engine.py kb-search <project_dir> <query> [<limit>]
   brain_engine.py kb-stats <project_dir>
@@ -497,10 +500,16 @@ def cmd_query_role(role: str, project_dir: str):
     # Also try FTS fallback search for the role
     fts_results = search_with_fallback(conn, role, limit=5)
 
-    # Recent decisions (last 15, any role — shared knowledge)
+    # Manual memories (user-defined rules — always injected, any role)
+    manual_memories = conn.execute(
+        """SELECT decision, created_at FROM decisions
+           WHERE agent_name = 'user' ORDER BY created_at DESC"""
+    ).fetchall()
+
+    # Recent team decisions (last 15, any role — shared knowledge)
     all_decisions = conn.execute(
         """SELECT d.decision, d.rationale, d.agent_name, d.created_at
-           FROM decisions d
+           FROM decisions d WHERE d.agent_name != 'user'
            ORDER BY d.created_at DESC LIMIT 15"""
     ).fetchall()
 
@@ -520,7 +529,7 @@ def cmd_query_role(role: str, project_dir: str):
 
     conn.close()
 
-    if not role_tasks and not all_decisions and not fts_results:
+    if not role_tasks and not all_decisions and not fts_results and not manual_memories:
         print(json.dumps({"additionalContext": ""}))
         return
 
@@ -529,6 +538,13 @@ def cmd_query_role(role: str, project_dir: str):
         f"_Auto-injected context from past Agent Team sessions_",
         "",
     ]
+
+    if manual_memories:
+        lines.append("### Project Rules & Conventions")
+        lines.append("_Always follow these — set manually by the team:_")
+        for m in manual_memories:
+            lines.append(f"- {m['decision']}")
+        lines.append("")
 
     if last_run and last_run["summary"]:
         lines += ["### Last Session Summary", last_run["summary"], ""]
@@ -733,6 +749,137 @@ def cmd_kb_stats(args):
     print(json.dumps({"chunks": row[0], "bytes_indexed": row[1], "sources": row[2]}))
 
 
+def cmd_remember(text: str, project_dir: str):
+    """Store a manual memory (rule/convention) that gets injected into all future teammates."""
+    if not text.strip():
+        print(json.dumps({"status": "error", "message": "Memory text cannot be empty"}))
+        sys.exit(1)
+
+    conn = get_conn(project_dir)
+
+    # Use a stable synthetic run for all manual memories
+    manual_run_id = 'manual-memories'
+    existing = conn.execute("SELECT id FROM runs WHERE id = ?", (manual_run_id,)).fetchone()
+    if not existing:
+        conn.execute(
+            "INSERT INTO runs (id, project_dir, session_id, started_at) VALUES (?,?,?,?)",
+            (manual_run_id, project_dir, 'manual', ts())
+        )
+
+    conn.execute(
+        """INSERT INTO decisions (id, run_id, agent_name, decision, rationale, tags, created_at)
+           VALUES (?,?,?,?,?,?,?)""",
+        (uid(), manual_run_id, 'user', text.strip(), '', json.dumps(['manual']), ts())
+    )
+    conn.commit()
+
+    total = conn.execute(
+        "SELECT COUNT(*) FROM decisions WHERE agent_name = 'user'"
+    ).fetchone()[0]
+    conn.close()
+
+    print(json.dumps({"status": "ok", "memory": text.strip(), "total_manual": total}))
+
+
+def cmd_forget(text: str, project_dir: str):
+    """Remove a manual memory by matching text (partial match supported)."""
+    conn = get_conn(project_dir)
+
+    matches = conn.execute(
+        "SELECT id, decision FROM decisions WHERE agent_name = 'user' AND lower(decision) LIKE ?",
+        (f"%{text.lower()}%",)
+    ).fetchall()
+
+    if not matches:
+        conn.close()
+        print(json.dumps({"status": "not_found", "message": f"No manual memory matching: {text}"}))
+        return
+
+    for m in matches:
+        conn.execute("DELETE FROM decisions WHERE id = ?", (m["id"],))
+    conn.commit()
+    conn.close()
+
+    removed = [m["decision"] for m in matches]
+    print(json.dumps({"status": "ok", "removed": removed}))
+
+
+def cmd_export_conventions(project_dir: str):
+    """Export accumulated brain knowledge as a CONVENTIONS.md content string."""
+    conn = get_conn(project_dir)
+
+    manual = conn.execute(
+        "SELECT decision FROM decisions WHERE agent_name = 'user' ORDER BY created_at DESC"
+    ).fetchall()
+
+    team_decisions = conn.execute(
+        """SELECT decision, rationale, agent_name FROM decisions
+           WHERE agent_name != 'user' ORDER BY created_at DESC LIMIT 30"""
+    ).fetchall()
+
+    files = conn.execute(
+        """SELECT file_path, COUNT(*) as touches, GROUP_CONCAT(DISTINCT agent_name) as agents
+           FROM file_index GROUP BY file_path ORDER BY touches DESC LIMIT 20"""
+    ).fetchall()
+
+    agents = conn.execute(
+        """SELECT DISTINCT agent_name, agent_role FROM tasks
+           WHERE agent_name != '' ORDER BY completed_at DESC LIMIT 10"""
+    ).fetchall()
+
+    conn.close()
+
+    lines = [
+        "# Project Conventions",
+        "",
+        "_Auto-generated by claude-teams-brain from accumulated Agent Team memory._",
+        "_Commit this file to share conventions with the whole team._",
+        "",
+    ]
+
+    if manual:
+        lines += ["## Rules & Conventions", ""]
+        for m in manual:
+            lines.append(f"- {m['decision']}")
+        lines.append("")
+
+    if team_decisions:
+        lines += ["## Architectural Decisions", ""]
+        for d in team_decisions[:20]:
+            by = d["agent_name"] or "team"
+            lines.append(f"- **[{by}]** {d['decision']}")
+            if d["rationale"]:
+                lines.append(f"  _{d['rationale']}_")
+        lines.append("")
+
+    if files:
+        lines += ["## Key Files", ""]
+        for f in files:
+            agents_str = f["agents"] or ""
+            lines.append(f"- `{f['file_path']}` — {f['touches']} edit(s) by {agents_str}")
+        lines.append("")
+
+    if agents:
+        lines += ["## Agent Roles", ""]
+        seen = set()
+        for a in agents:
+            name = a["agent_name"]
+            if name not in seen:
+                seen.add(name)
+                role = a["agent_role"] or name
+                lines.append(f"- **{name}**: {role}")
+        lines.append("")
+
+    content = "\n".join(lines)
+    print(json.dumps({
+        "status": "ok",
+        "content": content,
+        "rules_count": len(manual),
+        "decisions_count": len(team_decisions),
+        "files_count": len(files),
+    }))
+
+
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
 def main():
@@ -778,6 +925,20 @@ def main():
         elif cmd == "clear":
             project_dir = args[1] if len(args) > 1 else cwd
             cmd_clear(project_dir)
+
+        elif cmd == "remember":
+            text = args[1] if len(args) > 1 else ""
+            project_dir = args[2] if len(args) > 2 else cwd
+            cmd_remember(text, project_dir)
+
+        elif cmd == "forget":
+            text = args[1] if len(args) > 1 else ""
+            project_dir = args[2] if len(args) > 2 else cwd
+            cmd_forget(text, project_dir)
+
+        elif cmd == "export-conventions":
+            project_dir = args[1] if len(args) > 1 else cwd
+            cmd_export_conventions(project_dir)
 
         elif cmd == "kb-index":
             cmd_kb_index(args[1:])

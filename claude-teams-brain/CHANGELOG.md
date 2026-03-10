@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.2] - 2026-03-10
+
+### Added
+- `/brain-remember <text>` — manually store rules and conventions that get injected into every future teammate
+- `/brain-forget <text>` — remove a manually stored memory by partial text match
+- `/brain-export` — distill all accumulated brain knowledge into a committable `CONVENTIONS.md` file
+- Manual memories shown as "Project Rules & Conventions" section in teammate context (before team decisions)
+
 ## [1.0.1] - 2026-03-10
 
 ### Added

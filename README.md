@@ -225,6 +225,9 @@ The teammate starts with full context from day one.
 
 | Command | Description |
 |---------|-------------|
+| `/brain-remember <text>` | Store a rule or convention injected into all future teammates |
+| `/brain-forget <text>` | Remove a manually stored memory |
+| `/brain-export` | Export all brain knowledge as `CONVENTIONS.md` |
 | `/brain-status` | Memory stats for this project |
 | `/brain-query <role>` | Preview the context a new teammate would receive |
 | `/brain-runs` | List past Agent Team sessions |
