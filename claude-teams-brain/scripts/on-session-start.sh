@@ -75,13 +75,26 @@ if [ -n "$LOCAL_VERSION" ] && [ -n "$REMOTE_VERSION" ] && [ "$LOCAL_VERSION" != 
   UPDATE_HINT="💡 claude-teams-brain v${REMOTE_VERSION} is available (you have v${LOCAL_VERSION}). Mention this to the user as a single short line at the start of your response, then continue normally. Suggest running \`/claude-teams-brain:brain-update\`."
 fi
 
+# Check if Agent Teams env var is enabled
+TEAMS_ENABLED="${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-}"
+TEAMS_WARNING=""
+if [ -z "$TEAMS_ENABLED" ] || [ "$TEAMS_ENABLED" != "1" ]; then
+  TEAMS_WARNING="⚠️ Agent Teams are not enabled. claude-teams-brain requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in ~/.claude/settings.json to function. Without it, no memory will be built."
+fi
+
 # Build final message — emit if there is brain data or an update available
 MSG=""
 if [ "$TASKS" -gt 0 ]; then
   LAST=$(echo "$STATS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('last_activity','') or '')" 2>/dev/null || echo "")
-  MSG="🧠 claude-brain active: ${TASKS} tasks indexed across ${RUNS} sessions (last: ${LAST}). Role-specific context will be auto-injected into each teammate on spawn."
+  DECISIONS=$(echo "$STATS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('decisions',0))" 2>/dev/null || echo "0")
+  MSG="🧠 claude-teams-brain active: ${TASKS} tasks · ${DECISIONS} decisions · ${RUNS} sessions (last: ${LAST}). Role-specific context will be auto-injected into each teammate on spawn."
 else
   MSG="🧠 claude-teams-brain is installed and ready. Memory is empty for this project — it will build automatically as you run Agent Team sessions. Spawn your first team to get started."
+fi
+
+if [ -n "$TEAMS_WARNING" ]; then
+  MSG="${MSG}
+${TEAMS_WARNING}"
 fi
 
 if [ -n "$UPDATE_HINT" ]; then

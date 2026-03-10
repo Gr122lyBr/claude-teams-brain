@@ -51,4 +51,21 @@ fi
 # Index the task
 python3 "$ENGINE" index-task "$PARSED" >/dev/null 2>&1 || true
 
+# Confirm indexing to the user via additionalContext
+TASK_SUBJECT=$(echo "$PARSED" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_subject','') or '')" 2>/dev/null || echo "")
+AGENT=$(echo "$PARSED" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agent_name','') or '')" 2>/dev/null || echo "")
+
+if [ -n "$TASK_SUBJECT" ]; then
+  CONFIRM="🧠 Indexed: ${AGENT:+[${AGENT}] }${TASK_SUBJECT}"
+  python3 -c "
+import json, sys
+print(json.dumps({
+    'hookSpecificOutput': {
+        'hookEventName': 'TaskCompleted',
+        'additionalContext': sys.argv[1]
+    }
+}))
+" "$CONFIRM" 2>/dev/null || true
+fi
+
 exit 0

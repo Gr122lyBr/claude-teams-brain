@@ -181,7 +181,9 @@ The teammate starts with full context from day one.
 |---------|-------------|
 | `/brain-remember <text>` | Store a rule or convention injected into all future teammates |
 | `/brain-forget <text>` | Remove a manually stored memory |
+| `/brain-search <query>` | Search the full brain knowledge base directly |
 | `/brain-export` | Export all brain knowledge as `CONVENTIONS.md` |
+| `/brain-stats` | Full stats: persistent memory + session KB |
 | `/brain-status` | Memory stats for this project |
 | `/brain-query <role>` | Preview the context a new teammate would receive |
 | `/brain-runs` | List past Agent Team sessions |

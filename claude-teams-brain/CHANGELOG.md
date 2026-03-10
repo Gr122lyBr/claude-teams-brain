@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] - 2026-03-10
+
+### Added
+- Agent Teams env var check on SessionStart — warns if `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is not set
+- TaskCompleted confirmation — shows `🧠 Indexed: [agent] task` so users see the brain capturing work in real time
+- `/brain-search <query>` — search the full brain knowledge base directly from conversation
+- `/brain-stats` — full stats summary: persistent memory + session KB
+
+### Improved
+- SessionStart status now shows decisions count alongside tasks and sessions
+
 ## [1.0.3] - 2026-03-10
 
 ### Added
