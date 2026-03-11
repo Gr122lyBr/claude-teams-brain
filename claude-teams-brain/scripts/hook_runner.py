@@ -225,19 +225,17 @@ def hook_session_start(data):
     # Even without Agent Teams, inject previous session context into main Claude
     solo_context = ""
     if tasks > 0 and not teams_enabled:
-        solo_raw = run_engine("query-role", "solo", project_dir, "session start context")
-        try:
-            solo_context = json.loads(solo_raw).get("additionalContext", "")
-        except Exception:
-            solo_context = ""
-
-        # Also try "main" role (catches solo sessions indexed under main agent)
-        if not solo_context:
-            main_raw = run_engine("query-role", "main", project_dir, "previous session")
+        # Try "solo" role first (tasks indexed by current version)
+        for role_query in ("solo", "main", ""):
+            raw = run_engine("query-role", role_query, project_dir, "session start context")
             try:
-                solo_context = json.loads(main_raw).get("additionalContext", "")
+                solo_context = json.loads(raw).get("additionalContext", "")
             except Exception:
                 solo_context = ""
+            if solo_context:
+                break
+        # role="" acts as a wildcard — matches all tasks regardless of role,
+        # catching tasks indexed by older versions that stored empty agent_role
 
     # ── Status message ───────────────────────────────────────────────────────
     if tasks > 0:
@@ -420,6 +418,13 @@ def hook_task_completed(data):
         or agent_name
     )
 
+    # In solo mode (no agent running), agent_name and role are both empty.
+    # Tag these tasks as "solo" so hook_session_start can find them via query-role.
+    if not agent_name:
+        agent_name = "solo"
+    if not role:
+        role = "solo"
+
     payload = {
         "project_dir": project_dir,
         "run_id": session_id,
@@ -435,7 +440,7 @@ def hook_task_completed(data):
     run_engine("index-task", input_data=json.dumps(payload))
 
     if task_subject:
-        prefix = f"[{agent_name}] " if agent_name else ""
+        prefix = f"[{agent_name}] " if agent_name not in ("solo", "") else ""
         emit_context("TaskCompleted", f"🧠 Indexed: {prefix}{task_subject}")
 
 

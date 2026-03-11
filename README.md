@@ -32,6 +32,14 @@ In Claude Code, run:
 /plugin install claude-teams-brain@claude-teams-brain
 ```
 
+> **If `/plugin install` fails with "Source path does not exist":** This is a known Claude Code bug — `/plugin marketplace add` registers the marketplace but doesn't clone the repo to disk. Fix it by running the bootstrap script first:
+>
+> ```bash
+> bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+> ```
+>
+> Then restart Claude Code. The script clones the repo, patches `known_marketplaces.json`, and sets up the plugin cache automatically.
+
 ### 2. Enable Agent Teams
 
 Add to `~/.claude/settings.json`:
@@ -247,13 +255,22 @@ The teammate starts with full context from day one.
 /brain-update
 ```
 
-If you installed an older version and `/brain-update` is not yet available, re-add the marketplace:
+If you installed an older version and `/brain-update` is not yet available, or if the update fails with a "Source path does not exist" error, run the bootstrap script instead:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+```
+
+This clones/pulls the latest repo, patches `known_marketplaces.json`, and re-syncs the plugin cache. Then restart Claude Code.
+
+If you prefer the manual steps:
 
 ```
 /plugin marketplace remove claude-teams-brain
 /plugin marketplace add https://github.com/Gr122lyBr/claude-teams-brain
-/plugin install claude-teams-brain@claude-teams-brain
 ```
+
+Then run the bootstrap script above before running `/plugin install claude-teams-brain@claude-teams-brain`.
 
 ---
 
@@ -396,6 +413,35 @@ Each project has its own isolated brain. Memory never crosses project boundaries
 - **Use `/brain-search <query>`** to verify what the brain has indexed — great for debugging or confirming memory is building
 - **Use `/brain-stats`** to see a full breakdown of indexed tasks, decisions, and session KB usage
 - **Solo mode works without Agent Teams** — memory still builds from your own sessions; previous context is injected at every session start automatically
+
+---
+
+## Troubleshooting
+
+### "Source path does not exist" on install or reinstall
+
+**Cause:** Claude Code's `/plugin marketplace add` registers the marketplace in `known_marketplaces.json` but does not clone the repo to disk. The installer then can't find the source files.
+
+**Fix:** Run the bootstrap script, which clones the repo to the correct location and patches `known_marketplaces.json`:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+```
+
+Then restart Claude Code. You do not need to run `/plugin install` again — the script sets up the cache directly.
+
+### Manual workaround (no curl)
+
+```bash
+git clone https://github.com/Gr122lyBr/claude-teams-brain.git \
+  ~/.claude/plugins/marketplaces/claude-teams-brain
+```
+
+Then run `/plugin install claude-teams-brain@claude-teams-brain` inside Claude Code and restart.
+
+### Plugin not active after update
+
+Run `/brain-update` to re-sync. If the command isn't available, use the bootstrap script above.
 
 ---
 
