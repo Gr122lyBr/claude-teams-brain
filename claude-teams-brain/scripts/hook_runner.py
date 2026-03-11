@@ -84,6 +84,39 @@ def index_text(project_dir, source, content):
         pass
 
 
+# Expanded set of decision signal phrases
+DECISION_KEYWORDS = [
+    # Explicit decision markers
+    "decided to", "decided that", "we decided", "i decided",
+    "chose to", "choice:", "selected ",
+    "opted for", "going with",
+    "will use", "should use", "must use",
+    # Structural markers
+    "approach:", "decision:", "rationale:", "reason:",
+    "note:", "convention:", "rule:", "key decision",
+    "important:", "pattern:", "strategy:",
+    # Change / migration markers
+    "switched to", "migrated to", "refactored to",
+    "instead of", "rather than", "replacing",
+    # Future intent
+    "we'll use", "i'll use", "we will use",
+]
+
+
+def extract_decisions_from_text(text, max_chars=500):
+    """Extract decision-like lines from text using expanded keyword matching."""
+    decisions = []
+    for line in text.split("\n"):
+        lc = line.lower().strip()
+        if not lc or len(lc) < 10:
+            continue
+        if any(kw in lc for kw in DECISION_KEYWORDS):
+            clean = line.strip()[:max_chars]
+            if clean and clean not in decisions:
+                decisions.append(clean)
+    return decisions
+
+
 def dir_tree(project_dir):
     """Pure-Python directory tree (cross-platform, no find/ls needed)."""
     exclude = {
@@ -352,19 +385,27 @@ def hook_subagent_stop(data):
                         )
                         if fp and fp not in files_touched:
                             files_touched.append(fp)
-                    # Capture decision lines from text
+                    # Capture decision lines from text blocks
                     if block.get("type") == "text":
-                        for line in block.get("text", "").split("\n"):
-                            lc = line.lower()
-                            if any(
-                                kw in lc for kw in [
-                                    "decided to", "chose to", "will use",
-                                    "approach:", "decision:", "rationale:",
-                                ]
-                            ):
-                                clean = line.strip()[:200]
-                                if clean and clean not in decisions:
-                                    decisions.append(clean)
+                        for d in extract_decisions_from_text(block.get("text", "")):
+                            if d not in decisions:
+                                decisions.append(d)
+                    # Capture decisions from comments inside written/edited files
+                    if block.get("type") == "tool_use" and block.get("name") in (
+                        "Write", "Edit", "MultiEdit",
+                    ):
+                        inp = block.get("input", {})
+                        file_content = (
+                            inp.get("new_string", "") or inp.get("content", "") or ""
+                        )
+                        if file_content:
+                            comment_lines = "\n".join(
+                                ln for ln in file_content.split("\n")
+                                if ln.strip().startswith(("#", "//", "*", "/*"))
+                            )
+                            for d in extract_decisions_from_text(comment_lines):
+                                if d not in decisions:
+                                    decisions.append(d)
 
             if last_message:
                 output_summary = last_message[:500]
@@ -425,6 +466,18 @@ def hook_task_completed(data):
     if not role:
         role = "solo"
 
+    # Extract decisions from all available text in the event payload
+    all_text = "\n".join(filter(None, [
+        task_subject,
+        data.get("output", "") or "",
+        data.get("result", "") or "",
+        data.get("description", "") or "",
+    ]))
+    decisions = extract_decisions_from_text(all_text)
+
+    # Accept files_touched if the event provides them (future-proof)
+    files_touched = list(data.get("files_touched") or [])
+
     payload = {
         "project_dir": project_dir,
         "run_id": session_id,
@@ -433,8 +486,8 @@ def hook_task_completed(data):
         "agent_name": agent_name,
         "agent_role": role,
         "task_id": task_id,
-        "files_touched": [],
-        "decisions": [],
+        "files_touched": files_touched,
+        "decisions": decisions,
         "output_summary": task_subject,
     }
     run_engine("index-task", input_data=json.dumps(payload))
