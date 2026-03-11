@@ -35,7 +35,7 @@ In Claude Code, run:
 > **If `/plugin install` fails with "Source path does not exist":** This is a known Claude Code bug — `/plugin marketplace add` registers the marketplace but doesn't clone the repo to disk. Fix it by opening a **regular terminal** (Terminal, iTerm2, PowerShell, or WSL — not inside Claude Code) and running:
 >
 > ```bash
-> bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+> bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/claude-teams-brain/scripts/install.sh)
 > ```
 >
 > Then restart Claude Code. The script clones the repo, patches `known_marketplaces.json`, and sets up the plugin cache automatically.
@@ -262,7 +262,7 @@ If you are on an older version, or if the update fails with a "Source path does 
 **Run this in your terminal** (not inside Claude Code — open a regular terminal like Terminal, iTerm2, PowerShell, or WSL):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/claude-teams-brain/scripts/install.sh)
 ```
 
 This clones/pulls the latest repo, patches `known_marketplaces.json`, and re-syncs the plugin cache. Then restart Claude Code.
@@ -429,7 +429,7 @@ Each project has its own isolated brain. Memory never crosses project boundaries
 **Fix:** Open a **regular terminal** (Terminal, iTerm2, PowerShell, or WSL — not inside Claude Code) and run the bootstrap script:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/claude-teams-brain/scripts/install.sh)
 ```
 
 Then restart Claude Code. You do not need to run `/plugin install` again — the script sets up the cache directly.
