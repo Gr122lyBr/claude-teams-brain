@@ -125,6 +125,10 @@ CREATE TRIGGER IF NOT EXISTS kb_fts_ai AFTER INSERT ON kb_chunks BEGIN
     INSERT INTO kb_fts(rowid, title, content, chunk_id) VALUES (new.id, new.title, new.content, new.id);
 END;
 
+CREATE TRIGGER IF NOT EXISTS kb_fts_delete AFTER DELETE ON kb_chunks BEGIN
+    DELETE FROM kb_fts WHERE rowid = old.id;
+END;
+
 -- Full-text search
 CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
     task_subject, output_summary, decisions, agent_role,
@@ -144,6 +148,10 @@ CREATE TRIGGER IF NOT EXISTS tasks_fts_update AFTER UPDATE ON tasks BEGIN
         agent_role     = new.agent_role
     WHERE rowid = new.rowid;
 END;
+
+CREATE TRIGGER IF NOT EXISTS tasks_fts_delete AFTER DELETE ON tasks BEGIN
+    DELETE FROM tasks_fts WHERE rowid = old.rowid;
+END;
 """
 
 # Trigram FTS table — requires SQLite with trigram tokenizer support
@@ -162,6 +170,10 @@ CREATE TRIGGER IF NOT EXISTS tasks_fts_trigram_update AFTER UPDATE ON tasks BEGI
     DELETE FROM tasks_fts_trigram WHERE rowid = new.rowid;
     INSERT INTO tasks_fts_trigram(rowid, content)
     VALUES (new.rowid, COALESCE(new.task_subject, '') || ' ' || COALESCE(new.output_summary, '') || ' ' || COALESCE(new.decisions, '') || ' ' || COALESCE(new.agent_role, ''));
+END;
+
+CREATE TRIGGER IF NOT EXISTS tasks_fts_trigram_delete AFTER DELETE ON tasks BEGIN
+    DELETE FROM tasks_fts_trigram WHERE rowid = old.rowid;
 END;
 """
 
@@ -199,6 +211,9 @@ def get_conn(project_dir: str) -> sqlite3.Connection:
             title, content, chunk_id UNINDEXED, tokenize='trigram')""")
         conn.execute("""CREATE TRIGGER IF NOT EXISTS kb_fts_trigram_ai AFTER INSERT ON kb_chunks BEGIN
             INSERT INTO kb_fts_trigram(rowid, title, content, chunk_id) VALUES (new.id, new.title, new.content, new.id);
+        END""")
+        conn.execute("""CREATE TRIGGER IF NOT EXISTS kb_fts_trigram_delete AFTER DELETE ON kb_chunks BEGIN
+            DELETE FROM kb_fts_trigram WHERE rowid = old.id;
         END""")
         conn.commit()
     except Exception:
@@ -359,7 +374,7 @@ def kb_search_query(conn, query, limit=5):
     # Layer 1: Porter stemming
     try:
         rows = conn.execute(
-            "SELECT kc.title, kc.content, kc.source FROM kb_fts kf JOIN kb_chunks kc ON kf.rowid = kc.id WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?",
+            "SELECT kc.title, kc.content, kc.source FROM kb_fts kf JOIN kb_chunks kc ON kf.chunk_id = kc.id WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?",
             (query, limit)
         ).fetchall()
         if rows:
@@ -370,7 +385,7 @@ def kb_search_query(conn, query, limit=5):
     # Layer 2: Trigram
     try:
         rows = conn.execute(
-            "SELECT kc.title, kc.content, kc.source FROM kb_fts_trigram kf JOIN kb_chunks kc ON kf.rowid = kc.id WHERE kb_fts_trigram MATCH ? ORDER BY rank LIMIT ?",
+            "SELECT kc.title, kc.content, kc.source FROM kb_fts_trigram kf JOIN kb_chunks kc ON kf.chunk_id = kc.id WHERE kb_fts_trigram MATCH ? ORDER BY rank LIMIT ?",
             (query, limit)
         ).fetchall()
         if rows:
@@ -385,7 +400,7 @@ def kb_search_query(conn, query, limit=5):
             continue
         try:
             rows = conn.execute(
-                "SELECT kc.title, kc.content, kc.source FROM kb_fts kf JOIN kb_chunks kc ON kf.rowid = kc.id WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?",
+                "SELECT kc.title, kc.content, kc.source FROM kb_fts kf JOIN kb_chunks kc ON kf.chunk_id = kc.id WHERE kb_fts MATCH ? ORDER BY rank LIMIT ?",
                 (word, limit)
             ).fetchall()
             for row in rows:
