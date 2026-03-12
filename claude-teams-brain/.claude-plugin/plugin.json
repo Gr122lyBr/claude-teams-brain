@@ -1,6 +1,6 @@
 {
   "name": "claude-teams-brain",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Persistent cross-session memory for Agent Teams. Automatically indexes teammate outputs, decisions, and file changes — then injects role-specific context into each new teammate so your team never starts blind.",
   "author": {
     "name": "claude-teams-brain contributors",
