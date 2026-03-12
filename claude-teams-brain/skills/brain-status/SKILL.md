@@ -1,22 +1,25 @@
 ---
 name: brain-status
 description: |
-  Show claude-teams-brain memory stats for this project
+  Quick overview of brain memory — use /brain-stats for detailed breakdown with KB and per-role info
 user_invocable: true
 ---
 
 # brain-status
 
-Show the current state of the claude-teams-brain memory index for this project.
+Quick overview of brain memory for this project. For a full detailed breakdown (including session KB and per-role stats), suggest `/brain-stats` instead.
 
 ## Instructions
 
-Run:
+Run these two commands:
 ```
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py status "$CLAUDE_PROJECT_DIR"
 ```
+```
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py list-tasks "$CLAUDE_PROJECT_DIR" 3
+```
 
-Display the results in a clear, human-readable format:
+Display the status results in a clear, human-readable format:
 - Total tasks indexed
 - Total sessions recorded
 - Decisions logged
@@ -24,5 +27,7 @@ Display the results in a clear, human-readable format:
 - Distinct agents seen
 - Last activity timestamp
 
-If the brain has data, show the 3 most recent task summaries.
+If the brain has data, also display the 3 most recent tasks from the `list-tasks` output.
 If the brain is empty, tell the user memory will start building automatically once they run an Agent Team session.
+
+**Important**: Only use the exact commands shown above. Do not invent or guess other command names.

@@ -24,3 +24,5 @@ Wipe all brain memory for this project. This is irreversible.
    ```
 
 4. Confirm success and note that the brain will start building fresh from the next Agent Team session.
+
+**Important**: Only use the exact commands shown above (`status` and `clear`). Do not invent or guess other command names.

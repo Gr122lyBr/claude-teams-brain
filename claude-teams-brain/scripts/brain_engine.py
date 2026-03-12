@@ -12,6 +12,7 @@ Usage:
   brain_engine.py status [<project_dir>]
   brain_engine.py summarize-run <run_id> [<project_dir>]
   brain_engine.py list-runs [<project_dir>]
+  brain_engine.py list-tasks [<project_dir>] [<limit>]
   brain_engine.py clear [<project_dir>]
   brain_engine.py remember <text> [<project_dir>]
   brain_engine.py forget <text> [<project_dir>]
@@ -23,6 +24,7 @@ Usage:
   brain_engine.py seed-profile <profile_name_or_path> [<project_dir>]
   brain_engine.py list-profiles
   brain_engine.py role-stats [<project_dir>]
+  brain_engine.py full-stats [<project_dir>]
   brain_engine.py decision-timeline [<project_dir>]
   brain_engine.py kb-source-age <project_dir> <source>
 """
@@ -1317,6 +1319,26 @@ def cmd_list_profiles():
     print(json.dumps(profiles, indent=2))
 
 
+def cmd_list_tasks(project_dir: str, limit: int = 5):
+    """List most recent tasks as JSON."""
+    conn = get_conn(project_dir)
+    rows = conn.execute(
+        "SELECT task_subject, agent_name, agent_role, output_summary, completed_at "
+        "FROM tasks ORDER BY completed_at DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    tasks = []
+    for r in rows:
+        tasks.append({
+            "subject": r["task_subject"],
+            "agent": r["agent_name"] or r["agent_role"] or "",
+            "summary": (r["output_summary"] or "")[:200],
+            "completed": r["completed_at"],
+        })
+    print(json.dumps(tasks, indent=2))
+
+
 def cmd_decision_timeline(project_dir: str):
     """Print all decisions chronologically, grouped by role."""
     conn = get_conn(project_dir)
@@ -1370,6 +1392,47 @@ def cmd_role_stats(project_dir: str):
         for r in rows
     ]
     print(json.dumps(result))
+
+
+def cmd_full_stats(project_dir: str):
+    """Return combined stats (status + kb-stats + role-stats) in one call."""
+    conn = get_conn(project_dir)
+
+    # Status
+    status = {
+        "project_id": project_id(project_dir),
+        "db_path": str(db_path(project_dir)),
+        "runs": conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0],
+        "tasks": conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
+        "decisions": conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0],
+        "files_indexed": conn.execute("SELECT COUNT(DISTINCT file_path) FROM file_index").fetchone()[0],
+        "agents_seen": conn.execute("SELECT COUNT(DISTINCT agent_name) FROM tasks WHERE agent_name != ''").fetchone()[0],
+        "last_activity": conn.execute("SELECT MAX(completed_at) FROM tasks").fetchone()[0],
+    }
+
+    # KB stats
+    kb_row = conn.execute("SELECT COUNT(*), COALESCE(SUM(bytes),0), COUNT(DISTINCT source) FROM kb_chunks").fetchone()
+    kb = {"chunks": kb_row[0], "bytes_indexed": kb_row[1], "sources": kb_row[2]}
+
+    # Role stats
+    role_rows = conn.execute(
+        """SELECT agent_role,
+                  COUNT(DISTINCT t.id)         AS task_count,
+                  COUNT(DISTINCT fi.file_path)  AS file_count,
+                  MAX(t.completed_at)           AS last_active
+           FROM tasks t
+           LEFT JOIN file_index fi ON fi.task_id = t.id
+           WHERE agent_role != ''
+           GROUP BY agent_role
+           ORDER BY task_count DESC"""
+    ).fetchall()
+    roles = [
+        {"role": r["agent_role"], "tasks": r["task_count"], "files": r["file_count"], "last_active": r["last_active"]}
+        for r in role_rows
+    ]
+
+    conn.close()
+    print(json.dumps({"status": status, "kb": kb, "roles": roles}, indent=2))
 
 
 def cmd_kb_source_age(args):
@@ -1479,6 +1542,14 @@ def main():
 
         elif cmd == "role-stats":
             cmd_role_stats(args[1] if len(args) > 1 else cwd)
+
+        elif cmd == "full-stats":
+            cmd_full_stats(args[1] if len(args) > 1 else cwd)
+
+        elif cmd == "list-tasks":
+            project_dir = args[1] if len(args) > 1 else cwd
+            limit = int(args[2]) if len(args) > 2 else 5
+            cmd_list_tasks(project_dir, limit)
 
         elif cmd == "decision-timeline":
             cmd_decision_timeline(args[1] if len(args) > 1 else cwd)

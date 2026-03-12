@@ -12,20 +12,12 @@ Show a full stats summary for persistent memory, the current session KB, and per
 
 ## Instructions
 
-Step 1 — Persistent brain stats:
+Run a single command that returns all stats (persistent memory, session KB, and per-role breakdown):
 ```
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py status "$CLAUDE_PROJECT_DIR"
-```
-
-Step 2 — Session KB stats:
-```
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py kb-stats "$CLAUDE_PROJECT_DIR"
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py full-stats "$CLAUDE_PROJECT_DIR"
 ```
 
-Step 3 — Per-role breakdown:
-```
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/brain_engine.py role-stats "$CLAUDE_PROJECT_DIR"
-```
+The response JSON has three keys: `status`, `kb`, and `roles`.
 
 Display as a clean summary:
 
@@ -58,3 +50,5 @@ Display as a clean summary:
 - **Per-role** — which roles have the most accumulated memory; roles with 0 tasks get no context injection
 
 If the brain is empty, encourage running an Agent Team session or using `/brain-remember` to seed initial conventions.
+
+**Important**: Only use the exact command shown above. Do not invent or guess other command names.
