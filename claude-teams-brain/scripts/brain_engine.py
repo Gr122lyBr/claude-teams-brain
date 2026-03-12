@@ -26,6 +26,7 @@ Usage:
   brain_engine.py role-stats [<project_dir>]
   brain_engine.py full-stats [<project_dir>]
   brain_engine.py decision-timeline [<project_dir>]
+  brain_engine.py learn [<project_dir>]
   brain_engine.py kb-source-age <project_dir> <source>
 """
 
@@ -36,6 +37,8 @@ import sqlite3
 import hashlib
 import re
 import time
+import subprocess
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1457,6 +1460,408 @@ def cmd_kb_source_age(args):
         print(json.dumps({"hours_ago": -1}))
 
 
+# ── Git Learn ─────────────────────────────────────────────────────────────────
+
+
+def _learn_run_git(args_list, project_dir, timeout=30):
+    """Run a git command and return stdout, or empty string on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", project_dir] + args_list,
+            capture_output=True, text=True, timeout=timeout
+        )
+        return result.stdout if result.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _learn_parse_git_log(raw_output):
+    """Parse git log output with NUL-delimited commits and numstat."""
+    if not raw_output.strip():
+        return []
+
+    commits = []
+    # Split on NUL byte — each chunk is one commit
+    chunks = raw_output.split('\x00')
+    for chunk in chunks:
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        lines = chunk.split('\n')
+        header = lines[0]
+        parts = header.split('\x01')
+        if len(parts) < 5:
+            continue
+
+        commit_hash, author, subject, body, date = parts[0], parts[1], parts[2], parts[3], parts[4]
+
+        files = []
+        for line in lines[1:]:
+            line = line.strip()
+            if not line:
+                continue
+            # numstat format: added\tdeleted\tpath
+            tab_parts = line.split('\t')
+            if len(tab_parts) >= 3:
+                path = tab_parts[2]
+                # Handle renames: {old => new}
+                if '=>' in path:
+                    # Extract new path from rename notation
+                    path = re.sub(r'\{[^}]*=> *([^}]*)\}', r'\1', path)
+                    path = path.replace('//', '/')
+                files.append(path)
+
+        commits.append({
+            "hash": commit_hash,
+            "author": author,
+            "subject": subject,
+            "body": body,
+            "date": date,
+            "files": files,
+        })
+
+    return commits
+
+
+def _learn_commit_conventions(commits):
+    """Extract commit message conventions."""
+    if not commits:
+        return []
+
+    conventions = []
+    subjects = [c["subject"] for c in commits]
+    total = len(subjects)
+
+    # 1. Conventional commits
+    cc_pattern = re.compile(r'^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\(.+?\))?(!)?:')
+    cc_matches = [s for s in subjects if cc_pattern.match(s)]
+    if len(cc_matches) > total * 0.4:
+        # Extract common scopes
+        scopes = []
+        for s in cc_matches:
+            m = re.match(r'^[a-z]+\((.+?)\)', s)
+            if m:
+                scopes.append(m.group(1))
+        scope_info = ""
+        if scopes:
+            from collections import Counter
+            top_scopes = [s for s, _ in Counter(scopes).most_common(3)]
+            if top_scopes:
+                scope_info = f" — common scopes: {', '.join(top_scopes)}"
+        conventions.append(f"Convention: commit messages use Conventional Commits (type: description){scope_info}")
+
+    # 2. Ticket prefixes
+    ticket_pattern = re.compile(r'^[A-Z]{2,}-\d+|^\[.+?\]|#\d+')
+    ticket_matches = [s for s in subjects if ticket_pattern.search(s)]
+    if len(ticket_matches) > total * 0.25:
+        # Find example prefix
+        examples = set()
+        for s in ticket_matches[:10]:
+            m = re.match(r'^([A-Z]{2,})-\d+', s)
+            if m:
+                examples.add(m.group(1))
+        ex = f" (e.g., {list(examples)[0]}-XXX)" if examples else ""
+        conventions.append(f"Convention: commit messages reference tickets{ex}")
+
+    # 3. Subject casing
+    alpha_subjects = [s for s in subjects if s and s[0].isalpha()]
+    if alpha_subjects:
+        lowercase_ratio = sum(1 for s in alpha_subjects if s[0].islower()) / len(alpha_subjects)
+        if lowercase_ratio > 0.7:
+            conventions.append("Convention: commit subjects start with lowercase")
+        elif lowercase_ratio < 0.2:
+            conventions.append("Convention: commit subjects start with uppercase")
+
+    # 4. Co-authors
+    co_author_count = sum(1 for c in commits if 'Co-authored-by' in c.get("body", "") or 'Co-Authored-By' in c.get("body", ""))
+    if co_author_count > total * 0.3:
+        conventions.append("Convention: commits include Co-authored-by trailers")
+
+    return conventions
+
+
+def _learn_branch_conventions(project_dir):
+    """Extract branch naming conventions."""
+    raw = _learn_run_git(
+        ["branch", "-r", "--format=%(refname:short)", "--sort=-committerdate"],
+        project_dir, timeout=10
+    )
+    if not raw.strip():
+        return []
+
+    branches = [b.strip() for b in raw.strip().split('\n') if b.strip()][:50]
+    # Strip remote prefix (origin/)
+    names = [b.split('/', 1)[1] if '/' in b else b for b in branches]
+
+    conventions = []
+    prefixes = defaultdict(int)
+    prefix_pattern = re.compile(r'^(feature|feat|fix|bugfix|hotfix|chore|release|develop|staging)[/-]')
+    for name in names:
+        m = prefix_pattern.match(name)
+        if m:
+            prefixes[m.group(1)] += 1
+
+    total_prefixed = sum(prefixes.values())
+    if total_prefixed > len(names) * 0.3 and total_prefixed >= 3:
+        top = sorted(prefixes.keys())
+        conventions.append(f"Convention: branches use prefix naming ({', '.join(p + '/' for p in top)})")
+
+    return conventions
+
+
+def _learn_architecture_signals(commits):
+    """Extract architecture signals from file paths."""
+    all_files = set()
+    for c in commits:
+        all_files.update(c["files"])
+
+    if not all_files:
+        return []
+
+    signals = []
+
+    # 1. Migration patterns
+    migration_frameworks = {
+        'alembic': 'Alembic (Python)',
+        'migrations': 'database migrations',
+        'flyway': 'Flyway',
+        'liquibase': 'Liquibase',
+        'knex': 'Knex.js',
+        'prisma/migrations': 'Prisma',
+    }
+    for key, name in migration_frameworks.items():
+        if any(key in f for f in all_files):
+            signals.append(f"Architecture: uses {name}")
+            break
+
+    # 2. Test naming patterns
+    test_patterns = {
+        '.test.': '*.test.* naming',
+        '.spec.': '*.spec.* naming',
+        'test_': 'test_* naming',
+        '_test.': '*_test.* naming',
+    }
+    test_counts = {k: sum(1 for f in all_files if k in f) for k in test_patterns}
+    dominant = max(test_counts, key=test_counts.get) if test_counts else None
+    if dominant and test_counts[dominant] >= 3:
+        signals.append(f"Convention: tests use {test_patterns[dominant]}")
+
+    # 3. Primary stack detection
+    stack_markers = {
+        'package.json': 'JavaScript/TypeScript (Node.js)',
+        'requirements.txt': 'Python',
+        'pyproject.toml': 'Python',
+        'go.mod': 'Go',
+        'Cargo.toml': 'Rust',
+        'pom.xml': 'Java (Maven)',
+        'build.gradle': 'Java/Kotlin (Gradle)',
+        'Gemfile': 'Ruby',
+        'composer.json': 'PHP',
+    }
+    for marker, stack in stack_markers.items():
+        if any(f.endswith(marker) or f == marker for f in all_files):
+            signals.append(f"Architecture: primary stack is {stack}")
+            break
+
+    # 4. CI/CD detection
+    ci_markers = {
+        '.github/workflows': 'GitHub Actions',
+        '.gitlab-ci': 'GitLab CI',
+        'Jenkinsfile': 'Jenkins',
+        '.circleci': 'CircleCI',
+        '.travis.yml': 'Travis CI',
+    }
+    for marker, name in ci_markers.items():
+        if any(marker in f for f in all_files):
+            signals.append(f"Architecture: CI/CD uses {name}")
+            break
+
+    # 5. Containerization
+    if any('Dockerfile' in f or 'docker-compose' in f for f in all_files):
+        signals.append("Architecture: uses Docker for containerization")
+
+    # 6. Monorepo detection
+    pkg_dirs = set()
+    for f in all_files:
+        if f.endswith('package.json'):
+            pkg_dirs.add(os.path.dirname(f))
+    if len(pkg_dirs) > 2:
+        signals.append("Architecture: monorepo structure detected")
+
+    return signals
+
+
+def _learn_file_coupling(commits):
+    """Find files that frequently change together."""
+    pair_counts = defaultdict(int)
+
+    for c in commits:
+        files = sorted(set(c["files"]))
+        # Skip mega-commits (likely auto-generated)
+        if len(files) > 50 or len(files) < 2:
+            continue
+        for i in range(len(files)):
+            for j in range(i + 1, len(files)):
+                pair_counts[frozenset({files[i], files[j]})] += 1
+
+    total = len(commits) or 1
+    threshold = max(3, int(total * 0.05))
+    coupled = [
+        (pair, count)
+        for pair, count in pair_counts.items()
+        if count >= threshold
+    ]
+    coupled.sort(key=lambda x: -x[1])
+
+    results = []
+    for pair, count in coupled[:20]:
+        a, b = sorted(pair)
+        results.append({
+            "file_a": a,
+            "file_b": b,
+            "co_occurrences": count,
+            "pct": round(count / total * 100, 1),
+        })
+    return results
+
+
+def _learn_hotspots(commits):
+    """Find files and directories with the most changes."""
+    file_counts = defaultdict(int)
+    dir_counts = defaultdict(int)
+
+    for c in commits:
+        for f in c["files"]:
+            file_counts[f] += 1
+            top_dir = f.split('/')[0] if '/' in f else f
+            dir_counts[top_dir] += 1
+
+    results = []
+    # Top 15 files
+    for path, count in sorted(file_counts.items(), key=lambda x: -x[1])[:15]:
+        results.append({"path": path, "commit_count": count, "type": "file"})
+    # Top 8 directories
+    for path, count in sorted(dir_counts.items(), key=lambda x: -x[1])[:8]:
+        results.append({"path": path, "commit_count": count, "type": "directory"})
+
+    return results
+
+
+def _learn_deduplicate(conn, new_conventions):
+    """Filter out conventions already stored in the brain."""
+    existing = conn.execute(
+        "SELECT decision FROM decisions WHERE agent_name = 'user'"
+    ).fetchall()
+    existing_set = {r["decision"].lower().strip() for r in existing}
+    return [c for c in new_conventions if c.lower().strip() not in existing_set]
+
+
+def cmd_learn(project_dir):
+    """Auto-learn conventions from git history."""
+    # Verify git repo
+    check = _learn_run_git(["rev-parse", "--git-dir"], project_dir, timeout=5)
+    if not check:
+        print(json.dumps({"status": "error", "message": "Not a git repository"}))
+        sys.exit(1)
+
+    # Parse git log (last 200 commits)
+    raw_log = _learn_run_git(
+        ["log", "--pretty=format:%x00%H%x01%an%x01%s%x01%b%x01%aI", "--numstat", "-200"],
+        project_dir, timeout=30
+    )
+    commits = _learn_parse_git_log(raw_log)
+    if not commits:
+        print(json.dumps({"status": "error", "message": "No commits found"}))
+        sys.exit(1)
+
+    # Run all analysis passes
+    all_conventions = []
+    all_conventions.extend(_learn_commit_conventions(commits))
+    all_conventions.extend(_learn_branch_conventions(project_dir))
+    all_conventions.extend(_learn_architecture_signals(commits))
+
+    # File analysis
+    couplings = _learn_file_coupling(commits)
+    hotspots = _learn_hotspots(commits)
+
+    # Deduplicate and store conventions
+    conn = get_conn(project_dir)
+    new_conventions = _learn_deduplicate(conn, all_conventions)
+    skipped = len(all_conventions) - len(new_conventions)
+
+    # Ensure a run exists for manual memories
+    manual_run_id = 'manual-memories'
+    existing = conn.execute("SELECT id FROM runs WHERE id = ?", (manual_run_id,)).fetchone()
+    if not existing:
+        conn.execute(
+            "INSERT INTO runs (id, project_dir, session_id, started_at) VALUES (?,?,?,?)",
+            (manual_run_id, project_dir, 'manual', ts())
+        )
+
+    # Store new conventions as decisions
+    for conv in new_conventions:
+        # Determine category tag
+        cat = 'general'
+        if conv.startswith('Architecture:'):
+            cat = 'architecture'
+        elif 'commit' in conv.lower():
+            cat = 'commit'
+        elif 'branch' in conv.lower():
+            cat = 'branch'
+        elif 'test' in conv.lower():
+            cat = 'testing'
+
+        conn.execute(
+            """INSERT INTO decisions (id, run_id, agent_name, decision, rationale, tags, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (uid(), manual_run_id, 'user', conv, 'Auto-learned from git history', json.dumps(['git-learn', cat]), ts())
+        )
+
+    # Store coupling data in KB (replace existing)
+    conn.execute("DELETE FROM kb_chunks WHERE source = 'git-learn-coupling'")
+    if couplings:
+        coupling_text = "# File Coupling Analysis\n\nFiles that frequently change together:\n\n"
+        for c in couplings:
+            coupling_text += f"- {c['file_a']} <-> {c['file_b']} ({c['co_occurrences']} commits, {c['pct']}%)\n"
+        content_bytes = coupling_text.encode('utf-8')
+        conn.execute(
+            "INSERT INTO kb_chunks (session_id, source, title, content, bytes, indexed_at) VALUES (?,?,?,?,?,?)",
+            ('git-learn', 'git-learn-coupling', 'File Coupling Patterns', coupling_text, len(content_bytes), ts())
+        )
+
+    # Store hotspot data in KB (replace existing)
+    conn.execute("DELETE FROM kb_chunks WHERE source = 'git-learn-hotspots'")
+    if hotspots:
+        file_spots = [h for h in hotspots if h["type"] == "file"]
+        dir_spots = [h for h in hotspots if h["type"] == "directory"]
+        hotspot_text = "# Code Hotspot Analysis\n\n## Most Changed Files\n\n"
+        for h in file_spots:
+            hotspot_text += f"- {h['path']} ({h['commit_count']} commits)\n"
+        hotspot_text += "\n## Most Active Directories\n\n"
+        for h in dir_spots:
+            hotspot_text += f"- {h['path']}/ ({h['commit_count']} commits)\n"
+        content_bytes = hotspot_text.encode('utf-8')
+        conn.execute(
+            "INSERT INTO kb_chunks (session_id, source, title, content, bytes, indexed_at) VALUES (?,?,?,?,?,?)",
+            ('git-learn', 'git-learn-hotspots', 'Code Hotspot Analysis', hotspot_text, len(content_bytes), ts())
+        )
+
+    conn.commit()
+    conn.close()
+
+    print(json.dumps({
+        "status": "ok",
+        "commits_analyzed": len(commits),
+        "conventions_found": len(all_conventions),
+        "conventions_added": len(new_conventions),
+        "conventions_skipped": skipped,
+        "file_couplings": len(couplings),
+        "hotspots": len(hotspots),
+        "conventions": new_conventions,
+        "message": f"Learned {len(new_conventions)} conventions from {len(commits)} commits."
+    }, indent=2))
+
+
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
 def main():
@@ -1556,6 +1961,9 @@ def main():
 
         elif cmd == "kb-source-age":
             cmd_kb_source_age(args[1:])
+
+        elif cmd == "learn":
+            cmd_learn(args[1] if len(args) > 1 else cwd)
 
         else:
             print(f"Unknown command: {cmd}", file=sys.stderr)

@@ -15,6 +15,30 @@ Claude Code's Agent Teams are powerful — but ephemeral. Every teammate spawns 
 
 Your AI team gets smarter with every session. No extra prompting. No manual context copying. No more starting from zero.
 
+### New: `/brain-learn` — Zero-setup convention learning
+
+Run one command. The brain scans your git history and **automatically learns** your project's conventions, architecture, file coupling patterns, and code hotspots. No manual `/brain-remember` needed — your repo teaches the brain.
+
+```
+> /brain-learn
+
+Learned from Git History (187 commits)
+
+  Conventions Added (6 new)
+  - Convention: commit messages use Conventional Commits — common scopes: api, auth, db
+  - Convention: branches use prefix naming (feature/, fix/, chore/)
+  - Architecture: primary stack is TypeScript (Node.js)
+  - Architecture: CI/CD uses GitHub Actions
+  - Architecture: uses Docker for containerization
+  - Convention: tests use *.test.ts naming
+
+  Also Indexed
+  - 12 file coupling patterns (searchable via /brain-search coupling)
+  - 23 code hotspots (searchable via /brain-search hotspots)
+```
+
+Install the plugin on any existing repo, run `/brain-learn`, and your teammates instantly understand the project. Works on any stack, any repo size.
+
 ---
 
 ## Installation
@@ -103,7 +127,11 @@ Restart Claude Code after saving `settings.json`.
 
 ## Quick Start
 
-> **Solo mode works too.** claude-teams-brain builds memory from your own sessions even without Agent Teams. But multi-agent teams produce richer, role-specific memory — the two options below show how to trigger them.
+> **Solo mode works too.** claude-teams-brain builds memory from your own sessions even without Agent Teams. But multi-agent teams produce richer, role-specific memory — the options below show how to trigger them.
+
+### Step 0 — Bootstrap the brain (optional but recommended)
+
+On an existing repo, run `/brain-learn` to instantly bootstrap the brain from your git history. On a new project, run `/brain-seed <profile>` instead. Either way, your teammates start informed from the very first session.
 
 ### Option A — Trigger a team manually
 
@@ -233,6 +261,7 @@ The teammate starts with full context from day one.
 
 | Command | Description |
 |---------|-------------|
+| `/brain-learn` | **Auto-learn conventions from git history** — detects commit style, branch naming, stack, CI/CD, test patterns, file coupling, and hotspots |
 | `/brain-remember <text>` | Store a rule or convention injected into all future teammates |
 | `/brain-forget <text>` | Remove a manually stored memory |
 | `/brain-search <query>` | Search the full brain knowledge base directly |
@@ -382,6 +411,7 @@ claude-teams-brain/                    ← repo root (marketplace)
       brain-search/                    ← /brain-search
       brain-export/                    ← /brain-export
       brain-github-export/             ← /brain-github-export
+      brain-learn/                     ← /brain-learn (auto-learn from git)
       brain-seed/                      ← /brain-seed <profile>
       brain-replay/                    ← /brain-replay [run-id]
       brain-stats/                     ← /brain-stats
@@ -405,7 +435,8 @@ Each project has its own isolated brain. Memory never crosses project boundaries
 
 ## Tips
 
-- **New project? Run `/brain-seed` first** — pick a stack profile (`nextjs-prisma`, `fastapi`, `go-microservices`, `react-native`, `python-general`) and teammates start informed from session one, no cold start
+- **Existing repo? Run `/brain-learn` first** — the brain scans your git history and auto-extracts conventions, architecture signals, file coupling, and hotspots. One command, zero config, instant context
+- **New project? Run `/brain-seed` instead** — pick a stack profile (`nextjs-prisma`, `fastapi`, `go-microservices`, `react-native`, `python-general`) and teammates start informed from session one, no cold start
 - **Use descriptive agent names** that match their role (`backend`, `database`, `security`) — the brain routes memory by role name
 - **Memory compounds** — the first session is cold, but quality improves significantly from the second session onwards
 - **Use `/brain-remember`** to store project-specific conventions on top of a seeded profile — teammates will receive them immediately
