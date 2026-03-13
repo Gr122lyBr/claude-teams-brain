@@ -450,8 +450,23 @@ def hook_session_start(data):
     if update_hint:
         msg += f"\n{update_hint}"
 
-    # Combine status message + solo context
-    full_context = msg
+    # ── User-visible banner (stderr → terminal) ────────────────────────────
+    banner_parts = ["🧠 claude-teams-brain warming up..."]
+    if kb_sources:
+        banner_parts.append(f"   Indexed: {', '.join(kb_sources[:6])}")
+    if tasks > 0:
+        banner_parts.append(f"   Memory: {tasks} tasks · {decisions} decisions · {runs} sessions")
+    else:
+        banner_parts.append("   Memory: empty (will build as you work)")
+    if not teams_enabled:
+        banner_parts.append("   Mode: solo (set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 for teams)")
+    update_hint_banner = check_version()
+    if update_hint_banner:
+        banner_parts.append(f"   {update_hint_banner}")
+    banner_parts.append("🧠 Brain ready.")
+    print("\n".join(banner_parts), file=sys.stderr)
+
+    full_context = msg + "\n\n" + TOOL_GUIDANCE
     if solo_context:
         full_context += f"\n\n{solo_context}"
 

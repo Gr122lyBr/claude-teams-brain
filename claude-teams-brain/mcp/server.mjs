@@ -3,6 +3,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCode, runShell } from './executor.mjs';
+import { filterOutput, estimateTokens } from './output_filter.mjs';
 
 const ENGINE = join(process.env.CLAUDE_PLUGIN_ROOT ?? '', 'scripts', 'brain_engine.py');
 const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
@@ -19,6 +20,7 @@ const sessionStats = {
   bytesReturned: 0,
   bytesIndexed: 0,
   cacheHits: 0,
+  filterStats: { rawBytes: 0, filteredBytes: 0, commandsFiltered: 0 },
 };
 
 // In-memory command cache with 60s TTL to avoid re-running identical commands
@@ -34,6 +36,19 @@ function runCached(command, timeout) {
     return { ...cached.result, fromCache: true };
   }
   const result = runShell(command, timeout);
+
+  // Apply RTK-style output filtering
+  if (result.stdout) {
+    const f = filterOutput(command, result.stdout, result.stderr);
+    result.rawStdout = result.stdout;
+    result.stdout = f.filtered;
+    result.filterSavings = f.savings;
+    result.filterMatched = f.matched;
+    sessionStats.filterStats.rawBytes += f.rawLen;
+    sessionStats.filterStats.filteredBytes += f.filteredLen;
+    if (f.savings > 0) sessionStats.filterStats.commandsFiltered++;
+  }
+
   commandCache.set(cacheKey, { result, ts: now });
   return result;
 }
@@ -151,26 +166,31 @@ const TOOLS = [
 
 // --- Tool Handlers ---
 async function handleBatchExecute({ commands, queries, timeout = 60000 }) {
-  const parts = [];
+  const filteredParts = [];
+  const rawParts = [];
   const cacheInfo = [];
 
   for (const c of commands) {
     const result = runCached(c.command, timeout);
     const out = result.stdout || '(no output)';
     const tag = result.fromCache ? ' [cached]' : '';
-    parts.push(`# ${c.label}${tag}\n${out}\n`);
+    const savingsTag = result.filterSavings > 5 ? ` [${result.filterSavings}% filtered]` : '';
+    filteredParts.push(`# ${c.label}${tag}${savingsTag}\n${out}\n`);
+    // Index raw (unfiltered) output for richer KB search
+    rawParts.push(`# ${c.label}\n${result.rawStdout || out}\n`);
     cacheInfo.push(result.fromCache ? `${c.label}:cached` : `${c.label}:fresh`);
   }
 
   // Cap combined output at 2MB before indexing to prevent memory spikes
   const MAX_COMBINED = 2 * 1024 * 1024;
-  let combinedOutput = parts.join('\n');
-  if (combinedOutput.length > MAX_COMBINED) {
-    combinedOutput = combinedOutput.slice(0, MAX_COMBINED) + '\n...[output truncated at 2MB]';
+  let rawCombined = rawParts.join('\n');
+  if (rawCombined.length > MAX_COMBINED) {
+    rawCombined = rawCombined.slice(0, MAX_COMBINED) + '\n...[output truncated at 2MB]';
   }
   const source = `batch:${commands.map(c => c.label).join(',')}`.slice(0, 80);
 
-  const indexed = indexContent(combinedOutput, source);
+  // Index the RAW output so KB search has full content
+  const indexed = indexContent(rawCombined, source);
   const inventory = [`## Indexed ${indexed.chunks ?? 0} sections from ${commands.length} commands (${cacheInfo.join(', ')})\n`];
 
   const allResults = [];
@@ -205,14 +225,26 @@ async function handleIndex({ content, source }) {
 async function handleExecute({ language, code, timeout = 30000, intent }) {
   const result = await runCode({ language, code, timeout });
   let output = result.stdout || '';
+  const rawOutput = output;
 
   if (result.timedOut) output += '\n[TIMED OUT]';
   if (result.exitCode !== 0 && result.stderr) output += `\n[stderr]: ${result.stderr.slice(0, 500)}`;
 
+  // Apply output filtering for shell commands
+  if (language === 'shell' && output) {
+    const cmd = code.trim().split('\n')[0]; // use first line as command hint
+    const f = filterOutput(cmd, output, result.stderr);
+    output = f.filtered;
+    sessionStats.filterStats.rawBytes += f.rawLen;
+    sessionStats.filterStats.filteredBytes += f.filteredLen;
+    if (f.savings > 0) sessionStats.filterStats.commandsFiltered++;
+  }
+
   const INTENT_THRESHOLD = 5000;
   if (intent && Buffer.byteLength(output) > INTENT_THRESHOLD) {
     const source = `execute:${language}`;
-    indexContent(output, source);
+    // Index raw output for richer search
+    indexContent(rawOutput, source);
     const results = searchKB(intent, 5);
     const text = `Output too large (${output.length} bytes) — indexed and searched by intent: "${intent}"\n\n` + formatSearchResults(results);
     track('execute', text.length);
@@ -230,6 +262,12 @@ function handleStats() {
     ? (sessionStats.bytesIndexed / Math.max(sessionStats.bytesReturned, 1)).toFixed(1)
     : '1.0';
 
+  const { rawBytes, filteredBytes, commandsFiltered } = sessionStats.filterStats;
+  const filterSavings = rawBytes > 0
+    ? Math.round((1 - filteredBytes / rawBytes) * 100)
+    : 0;
+  const tokensSaved = estimateTokens(rawBytes - filteredBytes);
+
   const lines = [
     `Session: ${elapsed}s`,
     `Calls: ${JSON.stringify(sessionStats.calls)}`,
@@ -237,6 +275,7 @@ function handleStats() {
     `Returned to context: ${(sessionStats.bytesReturned / 1024).toFixed(1)}KB`,
     `Indexed (kept out of context): ${(sessionStats.bytesIndexed / 1024).toFixed(1)}KB`,
     `Context savings ratio: ${ratio}x (${ratio}x more indexed than returned)`,
+    `Output filtering: ${commandsFiltered} commands filtered, ${filterSavings}% reduction (${(rawBytes/1024).toFixed(1)}KB → ${(filteredBytes/1024).toFixed(1)}KB, ~${tokensSaved} tokens saved)`,
   ];
   return lines.join('\n');
 }
