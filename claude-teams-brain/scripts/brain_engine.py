@@ -913,7 +913,7 @@ def cmd_init_run(project_dir: str, session_id: str):
 
 
 def cmd_kb_index(args):
-    """Index content into the knowledge base."""
+    """Index content into the knowledge base (replaces previous entries for same source)."""
     project_dir, source, content_file = args[0], args[1], args[2]
     with open(content_file, 'r', encoding='utf-8', errors='replace') as f:
         content = f.read()
@@ -924,6 +924,9 @@ def cmd_kb_index(args):
     chunks = chunk_content(content, source)
     conn = get_conn(project_dir)
     session_id = os.environ.get('CLAUDE_SESSION_ID', '')
+
+    # Remove previous entries for this source to prevent duplicates across sessions
+    conn.execute("DELETE FROM kb_chunks WHERE source = ?", (source,))
 
     inserted = 0
     total_bytes = 0

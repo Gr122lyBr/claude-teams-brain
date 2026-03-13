@@ -88,18 +88,29 @@ Learned from Git History (187 commits)
 
 Install the plugin on any existing repo, run `/brain-learn`, and your teammates instantly understand the project. Works on any stack, any repo size.
 
-### Session Start Visibility
+### What Happens Before You Even Type
 
-Every new session now shows a visible warmup banner in your terminal:
+Every time you open a session, the brain silently does all of this **before your first message**:
+
+1. **Indexes your CLAUDE.md** — so Claude actually knows your project rules
+2. **Reads your last 20 git commits** — Claude understands what changed recently
+3. **Maps your directory tree** — Claude knows where everything lives
+4. **Indexes package.json / requirements.txt / go.mod** — Claude knows your stack
+5. **Loads .cursorrules, AGENTS.md, CONVENTIONS.md** — if they exist, they're searchable
+6. **Auto-detects your stack** — seeds best-practice conventions on first run
+7. **Loads all past decisions** — every architectural choice from previous sessions
+8. **Checks for updates** — tells you if a new version is available
+
+Without this plugin, Claude starts every session **completely blank**. With it, Claude already knows your project, your stack, your conventions, and what happened last session — all before you type a single word.
+
+Claude confirms everything is ready in its **first response**:
 
 ```
-🧠 claude-teams-brain warming up...
-   Indexed: CLAUDE.md, git-log, dir-tree, package.json
-   Memory: 25 tasks · 17 decisions · 16 sessions
-🧠 Brain ready.
+🧠 claude-teams-brain active — 25 tasks · 17 decisions · 16 sessions
+   KB warmed: CLAUDE.md, git-log, dir-tree, package.json
 ```
 
-No more guessing whether the brain is active — you see it working the moment Claude Code starts.
+> **Note:** The status appears when Claude responds to your first message. This is a Claude Code limitation — hooks can't display output before the conversation starts. The brain is already warmed up and working by the time you see this.
 
 ---
 

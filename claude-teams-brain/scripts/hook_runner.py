@@ -466,7 +466,25 @@ def hook_session_start(data):
     banner_parts.append("🧠 Brain ready.")
     print("\n".join(banner_parts), file=sys.stderr)
 
-    full_context = msg + "\n\n" + TOOL_GUIDANCE
+    # Build a short user-facing banner the model should display immediately
+    display_banner = f"🧠 **claude-teams-brain** active"
+    if tasks > 0:
+        display_banner += f" — {tasks} tasks · {decisions} decisions · {runs} sessions"
+    else:
+        display_banner += " — memory empty (will build as you work)"
+    if kb_sources:
+        display_banner += f"\n   KB warmed: {', '.join(kb_sources[:6])}"
+    if update_hint:
+        display_banner += f"\n   {update_hint}"
+
+    display_instruction = (
+        "\n\n**IMPORTANT — Display to user**: At the very start of your first response "
+        "(before any other output), display the following status line exactly as-is, "
+        "then proceed with whatever the user asked:\n\n"
+        f"{display_banner}\n"
+    )
+
+    full_context = msg + display_instruction + "\n\n" + TOOL_GUIDANCE
     if solo_context:
         full_context += f"\n\n{solo_context}"
 
