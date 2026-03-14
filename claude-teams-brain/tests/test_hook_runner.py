@@ -24,9 +24,10 @@ class TestCommandRouting(unittest.TestCase):
         return any(cmd_lower.startswith(s) or s in cmd_lower for s in hook_runner._SAFE_CMDS)
 
     def _is_blocked(self, cmd):
-        """Check if a command matches the block list."""
+        """Check if a command matches the block list (primary command only, before pipes)."""
         cmd_lower = cmd.lower()
-        return any(p in cmd_lower for p in hook_runner._BLOCK_CMDS)
+        primary = cmd_lower.split("|")[0].strip() if "|" in cmd_lower else cmd_lower
+        return any(p in primary for p in hook_runner._BLOCK_CMDS)
 
     # ── Safe commands (Tier 1) ──
 
@@ -119,6 +120,40 @@ class TestCommandRouting(unittest.TestCase):
 
     def test_block_go_test(self):
         self.assertTrue(self._is_blocked("go test ./..."))
+
+    # ── Pipe safety: blocked patterns in pipe segments should NOT block ──
+
+    def test_pipe_grep_not_blocked(self):
+        """grep in a pipe segment should not block the command."""
+        self.assertFalse(self._is_blocked("docker compose build 2>&1 | grep error"))
+
+    def test_pipe_tail_not_blocked(self):
+        """tail in a pipe segment should not block the command."""
+        self.assertFalse(self._is_blocked("docker compose build 2>&1 | tail -20"))
+
+    def test_pipe_head_not_blocked(self):
+        """head in a pipe segment should not block the command."""
+        self.assertFalse(self._is_blocked("npm run build 2>&1 | head -50"))
+
+    def test_pipe_rg_not_blocked(self):
+        """rg in a pipe segment should not block the command."""
+        self.assertFalse(self._is_blocked("docker compose up 2>&1 | rg error"))
+
+    def test_pipe_cat_not_blocked(self):
+        """cat in a pipe segment should not block when primary is safe."""
+        self.assertFalse(self._is_blocked("docker compose build 2>&1 | cat -n"))
+
+    def test_pipe_chain_not_blocked(self):
+        """Multi-pipe chain with head + grep should not block."""
+        self.assertFalse(self._is_blocked("docker compose build 2>&1 | head -50 | grep error"))
+
+    def test_pipe_primary_still_blocked(self):
+        """Primary command should still be blocked even with pipes."""
+        self.assertTrue(self._is_blocked("git log --oneline | head -20"))
+
+    def test_pipe_primary_pytest_still_blocked(self):
+        """pytest as primary should still be blocked even with pipe."""
+        self.assertTrue(self._is_blocked("pytest -v | grep FAILED"))
 
     # ── Tier 3: commands that are neither safe nor blocked ──
 

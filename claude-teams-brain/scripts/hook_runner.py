@@ -794,13 +794,18 @@ def hook_pretooluse_bash(data):
     if any(cmd_lower.startswith(safe) or safe in cmd_lower for safe in _SAFE_CMDS):
         return
 
+    # Extract primary command (before first pipe) for blocking decisions.
+    # Pipe segments like `| grep`, `| tail`, `| head` are output-limiting
+    # and should NOT trigger blocks — only the primary command matters.
+    primary = cmd_lower.split("|")[0].strip() if "|" in cmd_lower else cmd_lower
+
     # Tier 2: Large-output commands — block and redirect to MCP
     for pattern in _BLOCK_CMDS:
-        if pattern in cmd_lower:
+        if pattern in primary:
             # Find specific redirect message, or use generic
             redirect = None
             for key, msg in _REDIRECT_MSG.items():
-                if key in cmd_lower:
+                if key in primary:
                     redirect = msg
                     break
             if not redirect:
