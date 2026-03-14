@@ -191,6 +191,51 @@ else
   echo "    installed_plugins.json not found — Claude Code will create it on next install."
 fi
 
+# --- 6. Add MCP tool permissions to ~/.claude/settings.json ---
+SETTINGS_JSON="${HOME}/.claude/settings.json"
+echo "==> Adding MCP tool permissions to ${SETTINGS_JSON}..."
+python3 - <<PYEOF
+import json, os
+
+settings_path = "${SETTINGS_JSON}"
+
+# Ensure directory exists
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+
+# Read existing settings or start fresh
+if os.path.exists(settings_path):
+    with open(settings_path, 'r') as f:
+        raw = f.read().strip()
+    data = json.loads(raw) if raw else {}
+else:
+    data = {}
+
+# Our MCP tool permission keys
+brain_tools = [
+    "mcp__plugin_claude-teams-brain_claude-teams-brain__batch_execute",
+    "mcp__plugin_claude-teams-brain_claude-teams-brain__execute",
+    "mcp__plugin_claude-teams-brain_claude-teams-brain__search",
+    "mcp__plugin_claude-teams-brain_claude-teams-brain__index",
+    "mcp__plugin_claude-teams-brain_claude-teams-brain__stats",
+]
+
+permissions = data.setdefault("permissions", {})
+allow_list = permissions.setdefault("allow", [])
+
+added = []
+for tool in brain_tools:
+    if tool not in allow_list:
+        allow_list.append(tool)
+        added.append(tool.split("__")[-1])
+
+if added:
+    with open(settings_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    print(f"    Added permissions: {', '.join(added)}")
+else:
+    print("    All brain MCP tools already permitted.")
+PYEOF
+
 echo ""
 echo "==> Bootstrap complete!"
 echo ""
