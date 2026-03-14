@@ -1,6 +1,6 @@
 {
   "name": "claude-teams-brain",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Persistent cross-session memory for Claude Code Agent Teams",
   "type": "module",
   "main": "start.mjs",
