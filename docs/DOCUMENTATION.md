@@ -38,16 +38,22 @@ Persistent cross-session memory + intelligent output filtering for Claude Code A
 
 ## Installation
 
-### Option A: Inside Claude Code
+### Option A: npx (recommended)
+
+```bash
+npx claude-teams-brain
+```
+
+### Option B: Inside Claude Code
 
 ```
 /plugin marketplace add https://github.com/Gr122lyBr/claude-teams-brain
 /plugin install claude-teams-brain@claude-teams-brain
 ```
 
-### Option B: Bootstrap Script (recommended for first install)
+### Option C: Bootstrap Script
 
-If Option A fails with "Source path does not exist", open a **regular terminal** (not inside Claude Code) and run:
+If other options fail, open a **regular terminal** (not inside Claude Code) and run:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Gr122lyBr/claude-teams-brain/master/claude-teams-brain/scripts/install.sh)
